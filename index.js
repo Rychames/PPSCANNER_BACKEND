@@ -3,6 +3,8 @@ const cors = require("cors");
 const bodyParser = require("body-parser");
 const mysql = require("mysql2");
 
+
+
 const app = express();
 const PORT = 5000;
 
@@ -10,13 +12,15 @@ const PORT = 5000;
 app.use(cors());
 app.use(bodyParser.json());
 
-// Configuração do banco de dados
+
 const db = mysql.createConnection({
-  host: "localhost",
-  user: "root",
-  password: "Ray8181@",
-  database: "ppscanner",
+  host: 'junction.proxy.rlwy.net', // Host fornecido
+  user: 'root',                    // Usuário fornecido
+  password: 'sIQQmXageViNtzbjyzdAuszNyvZHvDod', // Senha fornecida
+  port: 12005,                     // Porta fornecida
+  database: 'railway',             // Banco de dados fornecido
 });
+
 
 db.connect((err) => {
   if (err) {
