@@ -34,25 +34,63 @@ db.connect((err) => {
 
 // 1. Adicionar um item ao inventário
 app.post("/api/inventory", (req, res) => {
-  const { name, category, description, quantity } = req.body;
+  const {
+    name,
+    category,
+    description,
+    quantity,
+    size,
+    model,
+    brand,
+    unitOrBox,
+    deliveryCompany,
+    deliveredBy,
+    receivedBy,
+    deliveryTime,
+    images,
+  } = req.body;
 
   if (!name || !category || !description || !quantity) {
-    return res.status(400).json({ error: "Todos os campos são obrigatórios" });
+    return res.status(400).json({ error: "Os campos obrigatórios devem ser preenchidos" });
   }
 
   const qrCode = `${name}-${Date.now()}`;
-  const sql =
-    "INSERT INTO inventory (name, category, description, quantity, qr_code) VALUES (?, ?, ?, ?, ?)";
+  const sql = `
+    INSERT INTO inventory (
+      name, category, description, quantity, qr_code, size, model, brand, 
+      unitOrBox, deliveryCompany, deliveredBy, receivedBy, deliveryTime, images
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `;
 
-  db.query(sql, [name, category, description, quantity, qrCode], (err, result) => {
-    if (err) {
-      console.error("Erro ao inserir item:", err);
-      res.status(500).json({ error: "Erro ao inserir item no inventário" });
-    } else {
-      res.status(201).json({ message: "Item adicionado com sucesso!", qrCode });
+  db.query(
+    sql,
+    [
+      name,
+      category,
+      description,
+      quantity,
+      qrCode,
+      size,
+      model,
+      brand,
+      unitOrBox,
+      deliveryCompany,
+      deliveredBy,
+      receivedBy,
+      deliveryTime,
+      JSON.stringify(images), // Salvar as imagens como JSON
+    ],
+    (err, result) => {
+      if (err) {
+        console.error("Erro ao inserir item:", err);
+        res.status(500).json({ error: "Erro ao inserir item no inventário" });
+      } else {
+        res.status(201).json({ message: "Item adicionado com sucesso!", qrCode });
+      }
     }
-  });
+  );
 });
+
 
 // 2. Listar todos os itens do inventário
 app.get("/api/inventory", (req, res) => {
