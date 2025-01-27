@@ -2,25 +2,37 @@ const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
 const mysql = require("mysql2");
-
-
+const multer = require("multer");
+const path = require("path");
 
 const app = express();
 const PORT = 5000;
 
+// Configuração do Multer para upload de imagens
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, "./uploads/"); // Pasta para armazenar as imagens
+  },
+  filename: function (req, file, cb) {
+    cb(null, Date.now() + path.extname(file.originalname)); // Nome único para cada imagem
+  },
+});
+
+const upload = multer({ storage: storage });
+
 // Middleware
 app.use(cors());
 app.use(bodyParser.json());
+app.use("/uploads", express.static("uploads")); // Servir arquivos da pasta "uploads"
 
-
+// Conexão com o banco de dados do Railway
 const db = mysql.createConnection({
-  host: 'junction.proxy.rlwy.net', // Host fornecido
+  host: 'junction.proxy.rlwy.net', // Host fornecido pelo Railway
   user: 'root',                    // Usuário fornecido
   password: 'sIQQmXageViNtzbjyzdAuszNyvZHvDod', // Senha fornecida
   port: 12005,                     // Porta fornecida
   database: 'railway',             // Banco de dados fornecido
 });
-
 
 db.connect((err) => {
   if (err) {
@@ -30,10 +42,8 @@ db.connect((err) => {
   console.log("Conectado ao banco de dados!");
 });
 
-// Rotas
-
-// 1. Adicionar um item ao inventário
-app.post("/api/inventory", (req, res) => {
+// Rota para adicionar um item ao inventário com upload de imagens
+app.post("/api/inventory", upload.array("images", 5), (req, res) => {
   const {
     name,
     category,
@@ -47,14 +57,31 @@ app.post("/api/inventory", (req, res) => {
     deliveredBy,
     receivedBy,
     deliveryTime,
-    images,
   } = req.body;
 
-  if (!name || !category || !description || !quantity) {
-    return res.status(400).json({ error: "Os campos obrigatórios devem ser preenchidos" });
+  // Salvar as URLs das imagens
+  const imageUrls = req.files.map((file) => `/uploads/${file.filename}`);
+
+  // Lista de campos obrigatórios
+  const requiredFields = ["name", "category", "description", "quantity"];
+  const missingFields = [];
+
+  // Verificar campos obrigatórios
+  requiredFields.forEach((field) => {
+    if (!req.body[field]) {
+      missingFields.push(field);
+    }
+  });
+
+  if (missingFields.length > 0) {
+    return res.status(400).json({
+      error: "Os seguintes campos obrigatórios estão ausentes:",
+      missingFields,
+    });
   }
 
   const qrCode = `${name}-${Date.now()}`;
+
   const sql = `
     INSERT INTO inventory (
       name, category, description, quantity, qr_code, size, model, brand, 
@@ -78,7 +105,7 @@ app.post("/api/inventory", (req, res) => {
       deliveredBy,
       receivedBy,
       deliveryTime,
-      JSON.stringify(images), // Salvar as imagens como JSON
+      JSON.stringify(imageUrls), // Salvar como JSON
     ],
     (err, result) => {
       if (err) {
@@ -91,8 +118,7 @@ app.post("/api/inventory", (req, res) => {
   );
 });
 
-
-// 2. Listar todos os itens do inventário
+// Rota para listar todos os itens do inventário
 app.get("/api/inventory", (req, res) => {
   const sql = "SELECT * FROM inventory";
   db.query(sql, (err, results) => {
@@ -105,7 +131,7 @@ app.get("/api/inventory", (req, res) => {
   });
 });
 
-// 3. Buscar um item por QR Code ou ID
+// Rota para buscar um item específico por QR Code ou ID
 app.get("/api/inventory/detail/:identifier", (req, res) => {
   const { identifier } = req.params;
   const sql = isNaN(identifier)
