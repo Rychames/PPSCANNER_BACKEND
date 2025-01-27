@@ -43,13 +43,10 @@ db.connect((err) => {
 });
 
 // Rota para adicionar um item ao inventário com upload de imagens
-app.post("/api/inventory", upload.array("images", 5), (req, res) => {
-  console.log("Imagens recebidas:", req.files); // Verifique se as imagens estão sendo processadas
+app.post("/api/inventory", (req, res) => {
+  const { name, category, description, quantity, size, model, brand, unitOrBox, deliveryCompany, deliveredBy, receivedBy, deliveryTime, images } = req.body;
 
-  const { name, category, description, quantity, size, model, brand, unitOrBox, deliveryCompany, deliveredBy, receivedBy, deliveryTime } = req.body;
-
-  const imageUrls = req.files ? req.files.map((file) => `/uploads/${file.filename}`) : [];
-
+  // Verificando os campos obrigatórios
   const requiredFields = ["name", "category", "description", "quantity"];
   const missingFields = [];
 
@@ -66,7 +63,10 @@ app.post("/api/inventory", upload.array("images", 5), (req, res) => {
     });
   }
 
+  // Criando o QR Code
   const qrCode = `${name}-${Date.now()}`;
+
+  const imageUrls = images || []; // As imagens são enviadas em base64
 
   const sql = `
     INSERT INTO inventory (
@@ -91,7 +91,7 @@ app.post("/api/inventory", upload.array("images", 5), (req, res) => {
       deliveredBy,
       receivedBy,
       deliveryTime,
-      JSON.stringify(imageUrls), // Salvar como JSON
+      JSON.stringify(imageUrls), // Salvar as imagens como JSON base64
     ],
     (err, result) => {
       if (err) {
