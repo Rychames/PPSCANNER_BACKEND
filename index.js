@@ -44,13 +44,11 @@ db.connect((err) => {
 
 // Rota para adicionar um item ao inventário com upload de imagens
 app.post("/api/inventory", upload.array("images", 5), (req, res) => {
+  console.log("Imagens recebidas:", req.files); // Verifique se as imagens estão sendo processadas
+
   const { name, category, description, quantity, size, model, brand, unitOrBox, deliveryCompany, deliveredBy, receivedBy, deliveryTime } = req.body;
 
-  // Verifique os dados antes de prosseguir
-  console.log("Dados recebidos:", req.body);
-  console.log("Imagens recebidas:", req.files);
-
-  const imageUrls = req.files.map((file) => `/uploads/${file.filename}`);
+  const imageUrls = req.files ? req.files.map((file) => `/uploads/${file.filename}`) : [];
 
   const requiredFields = ["name", "category", "description", "quantity"];
   const missingFields = [];
