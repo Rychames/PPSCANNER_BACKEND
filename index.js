@@ -22,8 +22,8 @@ const upload = multer({ storage: storage });
 
 // Middleware
 app.use(cors());
-app.use(bodyParser.json());
-app.use("/uploads", express.static("uploads")); // Servir arquivos da pasta "uploads"
+app.use(express.json());
+app.use(express.urlencoded({ extended: true })); // Para dados de formulários URL-encoded
 
 // Conexão com o banco de dados do Railway
 const db = mysql.createConnection({
@@ -44,65 +44,74 @@ db.connect((err) => {
 
 // Rota para adicionar um item ao inventário com upload de imagens
 app.post("/api/inventory", (req, res) => {
-  const { name, category, description, quantity, size, model, brand, unitOrBox, deliveryCompany, deliveredBy, receivedBy, deliveryTime, images } = req.body;
+  console.log("Corpo da requisição recebido:", req.body);
 
-  // Verificando os campos obrigatórios
+  const {
+      name, category, description, quantity, size, model, brand,
+      unitOrBox, deliveryCompany, deliveredBy, receivedBy, deliveryTime, images
+  } = req.body;
+
   const requiredFields = ["name", "category", "description", "quantity"];
   const missingFields = [];
 
+  // Checando se todos os campos obrigatórios foram enviados
   requiredFields.forEach((field) => {
-    if (!req.body[field]) {
-      missingFields.push(field);
-    }
+      if (!req.body[field]) {
+          missingFields.push(field);
+      }
   });
 
   if (missingFields.length > 0) {
-    return res.status(400).json({
-      error: "Os seguintes campos obrigatórios estão ausentes:",
-      missingFields,
-    });
+      return res.status(400).json({
+          error: "Os seguintes campos obrigatórios estão ausentes:",
+          missingFields,
+      });
   }
 
-  // Criando o QR Code
   const qrCode = `${name}-${Date.now()}`;
 
-  const imageUrls = images || []; // As imagens são enviadas em base64
+  // Aqui você pode salvar as imagens como base64, diretamente no banco de dados.
+  const imageUrls = images || [];
 
   const sql = `
-    INSERT INTO inventory (
-      name, category, description, quantity, qr_code, size, model, brand, 
-      unitOrBox, deliveryCompany, deliveredBy, receivedBy, deliveryTime, images
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO inventory (
+          name, category, description, quantity, qr_code, size, model, brand, 
+          unitOrBox, deliveryCompany, deliveredBy, receivedBy, deliveryTime, images
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
   db.query(
-    sql,
-    [
-      name,
-      category,
-      description,
-      quantity,
-      qrCode,
-      size,
-      model,
-      brand,
-      unitOrBox,
-      deliveryCompany,
-      deliveredBy,
-      receivedBy,
-      deliveryTime,
-      JSON.stringify(imageUrls), // Salvar as imagens como JSON base64
-    ],
-    (err, result) => {
-      if (err) {
-        console.error("Erro ao inserir item:", err);
-        res.status(500).json({ error: "Erro ao inserir item no inventário" });
-      } else {
-        res.status(201).json({ message: "Item adicionado com sucesso!", qrCode });
+      sql,
+      [
+          name,
+          category,
+          description,
+          quantity,
+          qrCode,
+          size,
+          model,
+          brand,
+          unitOrBox,
+          deliveryCompany,
+          deliveredBy,
+          receivedBy,
+          deliveryTime,
+          JSON.stringify(imageUrls), // Salvar as imagens como base64 no banco de dados
+      ],
+      (err, result) => {
+          if (err) {
+              console.error("Erro ao inserir item:", err);
+              res.status(500).json({ error: "Erro ao inserir item no inventário" });
+          } else {
+              res.status(201).json({ message: "Item adicionado com sucesso!", qrCode });
+          }
       }
-    }
   );
 });
+
+
+
+
 
 
 // Rota para listar todos os itens do inventário
