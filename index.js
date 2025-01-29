@@ -1,37 +1,27 @@
 const express = require("express");
 const cors = require("cors");
-const bodyParser = require("body-parser");
 const mysql = require("mysql2");
 const multer = require("multer");
-const path = require("path");
 
 const app = express();
 const PORT = 5000;
 
-// Configuração do Multer para upload de imagens
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, "./uploads/"); // Pasta para armazenar as imagens
-  },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + path.extname(file.originalname)); // Nome único para cada imagem
-  },
-});
-
-const upload = multer({ storage: storage });
-
 // Middleware
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true })); // Para dados de formulários URL-encoded
+app.use(express.json({ limit: "10mb" })); // Permite JSON grande (para imagens base64)
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-// Conexão com o banco de dados do Railway
+// Configuração do Multer para armazenar imagens na memória
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
+
+// Conexão com o banco de dados no Railway
 const db = mysql.createConnection({
-  host: 'junction.proxy.rlwy.net', // Host fornecido pelo Railway
-  user: 'root',                    // Usuário fornecido
-  password: 'sIQQmXageViNtzbjyzdAuszNyvZHvDod', // Senha fornecida
-  port: 12005,                     // Porta fornecida
-  database: 'railway',             // Banco de dados fornecido
+  host: "junction.proxy.rlwy.net",
+  user: "root",
+  password: "sIQQmXageViNtzbjyzdAuszNyvZHvDod",
+  port: 12005,
+  database: "railway",
 });
 
 db.connect((err) => {
@@ -42,79 +32,63 @@ db.connect((err) => {
   console.log("Conectado ao banco de dados!");
 });
 
-// Rota para adicionar um item ao inventário com upload de imagens
-app.post("/api/inventory", (req, res) => {
-  console.log("Corpo da requisição recebido:", req.body);
+// 🟢 Criar um novo item no inventário (com imagens em base64)
+app.post("/api/inventory", upload.array("images", 5), (req, res) => {
+  const { body, files } = req;
+
+  const imagesBase64 = files.map((file) => file.buffer.toString("base64"));
 
   const {
-      name, category, description, quantity, size, model, brand,
-      unitOrBox, deliveryCompany, deliveredBy, receivedBy, deliveryTime, images
-  } = req.body;
-
-  const requiredFields = ["name", "category", "description", "quantity"];
-  const missingFields = [];
-
-  // Checando se todos os campos obrigatórios foram enviados
-  requiredFields.forEach((field) => {
-      if (!req.body[field]) {
-          missingFields.push(field);
-      }
-  });
-
-  if (missingFields.length > 0) {
-      return res.status(400).json({
-          error: "Os seguintes campos obrigatórios estão ausentes:",
-          missingFields,
-      });
-  }
+    name,
+    category,
+    description,
+    quantity,
+    size,
+    model,
+    brand,
+    unitOrBox,
+    deliveredBy,
+    receivedBy,
+    deliveryTime,
+  } = body;
 
   const qrCode = `${name}-${Date.now()}`;
 
-  // Aqui você pode salvar as imagens como base64, diretamente no banco de dados.
-  const imageUrls = images || [];
-
   const sql = `
       INSERT INTO inventory (
-          name, category, description, quantity, qr_code, size, model, brand, 
-          unitOrBox, deliveryCompany, deliveredBy, receivedBy, deliveryTime, images
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          name, category, description, quantity, qr_code, size, model, brand,
+          unitOrBox, deliveredBy, receivedBy, deliveryTime, images
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
   db.query(
-      sql,
-      [
-          name,
-          category,
-          description,
-          quantity,
-          qrCode,
-          size,
-          model,
-          brand,
-          unitOrBox,
-          deliveryCompany,
-          deliveredBy,
-          receivedBy,
-          deliveryTime,
-          JSON.stringify(imageUrls), // Salvar as imagens como base64 no banco de dados
-      ],
-      (err, result) => {
-          if (err) {
-              console.error("Erro ao inserir item:", err);
-              res.status(500).json({ error: "Erro ao inserir item no inventário" });
-          } else {
-              res.status(201).json({ message: "Item adicionado com sucesso!", qrCode });
-          }
+    sql,
+    [
+      name,
+      category,
+      description,
+      quantity,
+      qrCode,
+      size,
+      model,
+      brand,
+      unitOrBox,
+      deliveredBy,
+      receivedBy,
+      deliveryTime,
+      JSON.stringify(imagesBase64),
+    ],
+    (err, result) => {
+      if (err) {
+        console.error("Erro ao inserir item:", err);
+        return res.status(500).json({ error: "Erro ao inserir item no inventário" });
       }
+      res.status(201).json({ message: "Item adicionado com sucesso!", qrCode });
+    }
   );
 });
 
-
-
-
-
-
-// Rota para listar todos os itens do inventário
+// 🟡 Obter todos os itens do inventário
 app.get("/api/inventory", (req, res) => {
   const sql = "SELECT * FROM inventory";
   db.query(sql, (err, results) => {
@@ -127,12 +101,13 @@ app.get("/api/inventory", (req, res) => {
   });
 });
 
-// Rota para buscar um item específico por QR Code ou ID
-app.get("/api/inventory/detail/:identifier", (req, res) => {
+// 🔵 Obter um item pelo ID ou QR Code
+app.get("/api/inventory/:identifier", (req, res) => {
   const { identifier } = req.params;
   const sql = isNaN(identifier)
     ? "SELECT * FROM inventory WHERE qr_code = ?"
     : "SELECT * FROM inventory WHERE id = ?";
+
   db.query(sql, [identifier], (err, results) => {
     if (err) {
       console.error("Erro ao buscar item:", err);
@@ -145,7 +120,62 @@ app.get("/api/inventory/detail/:identifier", (req, res) => {
   });
 });
 
+// 🟠 Atualizar um item do inventário
+app.put("/api/inventory/:id", upload.array("images", 5), (req, res) => {
+  const { id } = req.params;
+  const { body, files } = req;
+
+  const imagesBase64 = files.length > 0 ? JSON.stringify(files.map((file) => file.buffer.toString("base64"))) : null;
+
+  const sql = `
+      UPDATE inventory SET
+          name = ?, category = ?, description = ?, quantity = ?, size = ?, model = ?, brand = ?,
+          unitOrBox = ?, deliveredBy = ?, receivedBy = ?, deliveryTime = ?
+          ${imagesBase64 ? ", images = ?" : ""}
+      WHERE id = ?
+  `;
+
+  const params = [
+    body.name,
+    body.category,
+    body.description,
+    body.quantity,
+    body.size,
+    body.model,
+    body.brand,
+    body.unitOrBox,
+    body.deliveredBy,
+    body.receivedBy,
+    body.deliveryTime,
+  ];
+
+  if (imagesBase64) params.push(imagesBase64);
+  params.push(id);
+
+  db.query(sql, params, (err, result) => {
+    if (err) {
+      console.error("Erro ao atualizar item:", err);
+      return res.status(500).json({ error: "Erro ao atualizar item" });
+    }
+    res.json({ message: "Item atualizado com sucesso!" });
+  });
+});
+
+// 🔴 Excluir um item do inventário
+app.delete("/api/inventory/:id", (req, res) => {
+  const { id } = req.params;
+  const sql = "DELETE FROM inventory WHERE id = ?";
+
+  db.query(sql, [id], (err, result) => {
+    if (err) {
+      console.error("Erro ao deletar item:", err);
+      return res.status(500).json({ error: "Erro ao excluir item" });
+    }
+    res.json({ message: "Item removido com sucesso!" });
+  });
+});
+
 // Iniciar o servidor
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`Servidor rodando em http://localhost:${PORT}`);
 });
